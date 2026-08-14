@@ -230,7 +230,7 @@ LocalAIPainter/
 - [x] 所有 22 个资源文件完整保留
 - [x] versionName = "4.0.0", versionCode = 40
 
----
+--- 
 
 ## 七、使用方式
 
