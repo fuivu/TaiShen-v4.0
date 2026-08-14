@@ -1,0 +1,169 @@
+# ============================================================
+#  Local AI Painter v3.0 — GitHub Actions CI/CD
+#  功能: Push/PR 时自动编译 Debug APK + Release APK
+#        打 Tag 时自动发布 Release
+# ============================================================
+
+name: Build & Release
+
+on:
+  push:
+    branches: [main, develop]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+env:
+  GRADLE_VERSION: "8.7"
+  JDK_VERSION: "17"
+  NDK_VERSION: "26.1.10909125"
+  ANDROID_API: "34"
+
+jobs:
+  # ── Job 1: 编译 Debug APK ──────────────────────────────
+  build-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JDK_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JDK_VERSION }}
+
+      - name: Install Gradle Wrapper
+        run: |
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            curl -L -o /tmp/gradle.zip \
+              "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+            unzip -j /tmp/gradle.zip "gradle-${GRADLE_VERSION}/lib/plugins/gradle-wrapper-*.jar" \
+              -d gradle/wrapper/
+            mv gradle/wrapper/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar
+          fi
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          echo "y" | sdkmanager "ndk;${NDK_VERSION}"
+          echo "y" | sdkmanager "platforms;android-${ANDROID_API}"
+          echo "y" | sdkmanager "build-tools;34.0.0"
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalAIPainter-v3.0-Debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
+
+  # ── Job 2: 编译 Release APK ───────────────────────────
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JDK_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JDK_VERSION }}
+
+      - name: Install Gradle Wrapper
+        run: |
+          if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
+            curl -L -o /tmp/gradle.zip \
+              "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
+            unzip -j /tmp/gradle.zip "gradle-${GRADLE_VERSION}/lib/plugins/gradle-wrapper-*.jar" \
+              -d gradle/wrapper/
+            mv gradle/wrapper/gradle-wrapper-*.jar gradle/wrapper/gradle-wrapper.jar
+          fi
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK
+        run: |
+          echo "y" | sdkmanager "ndk;${NDK_VERSION}"
+          echo "y" | sdkmanager "platforms;android-${ANDROID_API}"
+          echo "y" | sdkmanager "build-tools;34.0.0"
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release-key.jks
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/release-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          echo "storeFile=${KEYSTORE_PATH}" > signing.properties
+          echo "storePassword=${KEYSTORE_PASSWORD}" >> signing.properties
+          echo "keyAlias=${KEY_ALIAS}" >> signing.properties
+          echo "keyPassword=${KEY_PASSWORD}" >> signing.properties
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalAIPainter-v3.0-Release
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 90
+
+  # ── Job 3: 发布 GitHub Release ────────────────────────
+  publish-release:
+    needs: build-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Download Release APK
+        uses: actions/download-artifact@v4
+        with:
+          name: LocalAIPainter-v3.0-Release
+          path: ./apk
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./apk/*.apk
+          body: |
+            ## Local AI Painter v3.0.0
+
+            ### ✨ 核心功能
+            - 🎨 本地 AI 绘画引擎（SD1.5/SD2.1/SDXL/LCM/PixArt/Kolors）
+            - 🚀 五后端异构推理（QNN/MNN/NCNN/ORT/CPU）
+            - 📐 14 种采样器 + 6 种 ControlNet
+            - 🔧 5 路 LoRA 叠加 + 权重调节
+            - 🖼️ ESRGAN/SwinIR/RealESRGAN 超分
+            - 👤 GFPGAN/CodeFormer 人脸修复
+            - 🎭 6 套主题 + 18 个提示词模板
+
+            ### 📦 安装
+            下载 APK 后，在 Android 设置中允许"未知来源"安装即可。
+
+            ### 📋 系统要求
+            - Android 10+ (API 29+)
+            - 8GB+ RAM 推荐
+            - arm64-v8a 架构
+            - 支持 Vulkan/OpenCL/NPU 的设备体验更佳
+          draft: false
+          prerelease: false

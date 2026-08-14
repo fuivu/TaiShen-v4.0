@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-files-path name="outputs" path="outputs/" />
+    <external-files-path name="logs" path="logs/" />
+    <external-files-path name="models" path="models/" />
+    <external-files-path name="cache" path="cache/" />
+    <external-cache-path name="shared_cache" path="/" />
+    <files-path name="internal" path="." />
+</paths>

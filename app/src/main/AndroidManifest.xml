@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ═════════════════════════════════════════════
+         TaiShen Architecture v4.0 — AndroidManifest
+         Local AI Painter — 太神架构 4.0
+         ═════════════════════════════════════════════ -->
+
+    <!-- ─── 存储权限 ─────────────────────────────── -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- ─── 网络权限（更新检查/模型下载）────────── -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+
+    <!-- ─── 前台服务（后台生成）─────────────────── -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- ─── 开机自启 ─────────────────────────────── -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- ─── 振动反馈 ─────────────────────────────── -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- ─── 安装未知来源应用（模型导入）─────────── -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- ─── GPU 加速 ─────────────────────────────── -->
+    <uses-feature android:name="android.hardware.vulkan" android:required="false" />
+    <uses-feature android:name="android.hardware.opengles" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- ─── 大内存应用 ────────────────────────────── -->
+    <application
+        android:name=".LocalAIPainterApp"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.LocalAIPainter"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true"
+        android:requestLegacyExternalStorage="true"
+        tools:targetApi="31">
+
+        <!-- ═════════════════════════════════════
+             主 Activity（Compose UI 入口）
+             ═════════════════════════════════════ -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.LocalAIPainter.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- 支持从文件管理器打开图片 -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- ─── 生成服务（前台服务）────────────────── -->
+        <service
+            android:name=".service.GenerationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync|mediaPlayback" />
+
+        <service
+            android:name=".service.GenerationForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- ─── 模型下载服务 ─────────────────────────── -->
+        <service
+            android:name=".service.ModelDownloadService"
+            android:exported="false" />
+
+        <!-- ─── WorkManager Worker ────────────────────── -->
+        <service
+            android:name=".service.GenerationWorker"
+            android:exported="false" />
+
+        <!-- ═════════════════════════════════════
+             开机自启 Receivers
+             ═════════════════════════════════════ -->
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".service.BootCompletedReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ─── 文件提供者（导出/分享图片）────────── -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            tools:replace="android:authorities"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- ─── 通知渠道（Android 13+）────────────── -->
+        <meta-data
+            android:name="com.localaipainter.notification_channel_generation"
+            android:value="generation_channel" />
+        <meta-data
+            android:name="com.localaipainter.notification_channel_download"
+            android:value="download_channel" />
+
+    </application>
+
+</manifest>

@@ -1,0 +1,34 @@
+# ═════════════════════════════════════════════════════════════
+#  混元 (HunYuan) — CMake 构建  v4.0 TaiShen
+# ═════════════════════════════════════════════════════════════
+
+set(HUNYUAN_DIR ${CMAKE_CURRENT_SOURCE_DIR}/hunyuan)
+
+add_library(hunyuan SHARED
+    ${HUNYUAN_DIR}/hunyuan_algorithms.cpp
+    ${HUNYUAN_DIR}/hunyuan_jni.cpp
+)
+
+target_include_directories(hunyuan PRIVATE
+    ${HUNYUAN_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/xunji
+)
+
+target_compile_options(hunyuan PRIVATE
+    -std=c++17
+    -O3
+    -ffast-math
+    -funroll-loops
+    -fvisibility=hidden
+)
+
+if(ANDROID)
+    target_compile_options(hunyuan PRIVATE -mfpu=neon -mfloat-abi=softfp)
+    target_link_libraries(hunyuan PRIVATE log)
+endif()
+
+set_target_properties(hunyuan PROPERTIES
+    CXX_STANDARD 17
+    CXX_STANDARD_REQUIRED ON
+    POSITION_INDEPENDENT_CODE ON
+)
